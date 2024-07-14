@@ -1,8 +1,12 @@
 package com.fescaro.fescaro_interview_back.service;
 
+import com.fescaro.fescaro_interview_back.dto.FileResponseDto;
 import com.fescaro.fescaro_interview_back.entity.FileMetadata;
 import com.fescaro.fescaro_interview_back.repository.FileMetadataRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +29,13 @@ public class FileServiceImpl implements FileService {
     private static final String ENCRYPTED_PATH = "C:/fescaro-interview/encrypted/";
 
     private final FileMetadataRepository fileMetadataRepository;
+
+    @Override
+    public Page<FileResponseDto> findFiles(int page, int size) {
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by("uploadedAt").descending());
+        return fileMetadataRepository.findAll(pageRequest)
+                .map(FileResponseDto::from);
+    }
 
     @Override
     public void upload(MultipartFile file) throws Exception {
