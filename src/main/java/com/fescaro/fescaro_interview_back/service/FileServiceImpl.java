@@ -4,6 +4,8 @@ import com.fescaro.fescaro_interview_back.dto.FileResponseDto;
 import com.fescaro.fescaro_interview_back.entity.FileMetadata;
 import com.fescaro.fescaro_interview_back.repository.FileMetadataRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -14,7 +16,9 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
@@ -81,6 +85,24 @@ public class FileServiceImpl implements FileService {
                 .build();
 
         fileMetadataRepository.save(fileMetadata);
+    }
+
+    @Override
+    public Resource download(String fileName, String status) throws IOException {
+        String pathName = "";
+        if (status.equals("original")) {
+            pathName = UPLOADED_PATH + fileName;
+        }
+        if (status.equals("encrypted")) {
+            pathName = ENCRYPTED_PATH + fileName;
+        }
+
+        File file = new File(pathName);
+        if (!file.exists()) {
+            throw new FileNotFoundException("File not found: " + fileName);
+        }
+
+        return new FileSystemResource(file);
     }
 
     private byte[] createIv() {
