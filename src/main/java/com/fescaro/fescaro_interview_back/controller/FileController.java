@@ -3,14 +3,15 @@ package com.fescaro.fescaro_interview_back.controller;
 import com.fescaro.fescaro_interview_back.dto.FileResponseDto;
 import com.fescaro.fescaro_interview_back.service.FileService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 @RestController
 @RequiredArgsConstructor
@@ -22,6 +23,17 @@ public class FileController {
     public ResponseEntity<Void> upload(@RequestParam MultipartFile file) throws Exception {
         fileService.upload(file);
         return new ResponseEntity<>(HttpStatus.CREATED);
+    }
+
+    @GetMapping("/files/{fileName}")
+    public ResponseEntity<Resource> download(@PathVariable String fileName,
+                                             @RequestParam String status) throws IOException {
+
+        Resource resource = fileService.download(fileName, status);
+        String contentDisposition = "attachment; filename=\"" + resource.getFilename() + "\"";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                .body(resource);
     }
 
     @GetMapping("/files")
