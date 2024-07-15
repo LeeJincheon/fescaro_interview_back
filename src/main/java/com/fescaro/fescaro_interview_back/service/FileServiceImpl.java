@@ -4,6 +4,7 @@ import com.fescaro.fescaro_interview_back.dto.FileResponseDto;
 import com.fescaro.fescaro_interview_back.entity.FileMetadata;
 import com.fescaro.fescaro_interview_back.repository.FileMetadataRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -14,11 +15,14 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.SecureRandom;
@@ -28,11 +32,19 @@ import java.util.Base64;
 @RequiredArgsConstructor
 public class FileServiceImpl implements FileService {
 
-    private static final String SECRET_KEY = "0123456789abcdef";
-    private static final String UPLOADED_PATH = "C:/fescaro-interview/uploaded/";
-    private static final String ENCRYPTED_PATH = "C:/fescaro-interview/encrypted/";
-
     private final FileMetadataRepository fileMetadataRepository;
+    private final Charset ENCODING_TYPE = StandardCharsets.UTF_8;
+    private final String ENCRYPTION_ALGORITHM = "AES/GCM/NoPadding";
+
+
+    @Value("${encryption.key}")
+    private String secretKey;
+
+    @Value("${file.uploaded-path}")
+    private String uploadedPath;
+
+    @Value("${file.encrypted-path}")
+    private String encryptedPath;
 
     @Override
     public Page<FileResponseDto> findFiles(int page, int size) {
@@ -49,8 +61,8 @@ public class FileServiceImpl implements FileService {
             // 빈 파일인 경우 예외 처리 로직
         }
 
-        File uploadedFileDirectory = new File(UPLOADED_PATH);
-        File encryptedFileDirectory = new File(ENCRYPTED_PATH);
+        File uploadedFileDirectory = new File(uploadedPath);
+        File encryptedFileDirectory = new File(encryptedPath);
         if (!uploadedFileDirectory.exists()) {
             uploadedFileDirectory.mkdirs();
         }
@@ -65,15 +77,15 @@ public class FileServiceImpl implements FileService {
         String encryptedFilename = baseFilename + "_enc" + extension;
 
         // 원본 파일 저장
-        File originalFile = new File(UPLOADED_PATH + originalFilename);
-        file.transferTo(originalFile); // MultipartFile -> File
+        File originalFile = new File(uploadedPath + originalFilename);
+        file.transferTo(originalFile);
 
         // 암호화 결과 파일 생성
-        File encryptedFile = new File(ENCRYPTED_PATH + encryptedFilename);
+        File encryptedFile = new File(encryptedPath + encryptedFilename);
 
         // 파일 암호화
-        byte[] iv = createIv();
-        encryptFile(SECRET_KEY, iv, originalFile, encryptedFile);
+        IvParameterSpec iv = createIv();
+        encryptFile(secretKey, iv, originalFile, encryptedFile);
 
         // 파일 정보 DB에 저장
         FileMetadata fileMetadata = FileMetadata.builder()
@@ -81,7 +93,7 @@ public class FileServiceImpl implements FileService {
                 .originalFilePath(originalFile.getAbsolutePath())
                 .encryptedFileName(encryptedFilename)
                 .encryptedFilePath(encryptedFile.getAbsolutePath())
-                .iv(Base64.getEncoder().encodeToString(iv))
+                .iv(Base64.getEncoder().encodeToString(iv.getIV()))
                 .build();
 
         fileMetadataRepository.save(fileMetadata);
@@ -91,10 +103,10 @@ public class FileServiceImpl implements FileService {
     public Resource download(String fileName, String status) throws IOException {
         String pathName = "";
         if (status.equals("original")) {
-            pathName = UPLOADED_PATH + fileName;
+            pathName = uploadedPath + fileName;
         }
         if (status.equals("encrypted")) {
-            pathName = ENCRYPTED_PATH + fileName;
+            pathName = encryptedPath + fileName;
         }
 
         File file = new File(pathName);
@@ -105,24 +117,24 @@ public class FileServiceImpl implements FileService {
         return new FileSystemResource(file);
     }
 
-    private byte[] createIv() {
-        byte[] iv = new byte[12];
+    private IvParameterSpec createIv() {
+        byte[] iv = new byte[16];
         new SecureRandom().nextBytes(iv);
-        return iv;
+        return new IvParameterSpec(iv);
     }
 
-    private void encryptFile(String key, byte[] iv, File originalFile, File encryptedFile) throws Exception {
-        SecretKeySpec secretKey = new SecretKeySpec(key.getBytes(), "AES");
+    private void encryptFile(String key, IvParameterSpec iv, File originalFile, File encryptedFile) throws Exception {
+        SecretKeySpec secretKey = new SecretKeySpec(key.getBytes(ENCODING_TYPE), "AES");
 
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        GCMParameterSpec parameterSpec = new GCMParameterSpec(128, iv); // 128-bit authentication tag
+        Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+        GCMParameterSpec parameterSpec = new GCMParameterSpec(128, iv.getIV());
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec);
 
         byte[] inputBytes = Files.readAllBytes(Paths.get(originalFile.toURI()));
         byte[] outputBytes = cipher.doFinal(inputBytes);
 
         try (FileOutputStream outputStream = new FileOutputStream(encryptedFile)) {
-            outputStream.write(iv); // Prepend the IV for use in decryption
+            outputStream.write(iv.getIV());
             outputStream.write(outputBytes);
         }
     }
