@@ -4,6 +4,7 @@ import com.fescaro.fescaro_interview_back.dto.FileResponseDto;
 import com.fescaro.fescaro_interview_back.entity.FileMetadata;
 import com.fescaro.fescaro_interview_back.exception.FileProcessingException;
 import com.fescaro.fescaro_interview_back.repository.FileMetadataRepository;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -15,9 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.crypto.spec.IvParameterSpec;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
 import java.util.Base64;
 
 @Service
@@ -96,7 +95,7 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public Resource download(String fileName, String status) throws IOException {
+    public void download(String fileName, String status, HttpServletResponse response) throws IOException {
         String pathName = "";
         if (status.equals("original")) {
             pathName = uploadedPath + fileName;
@@ -110,7 +109,22 @@ public class FileServiceImpl implements FileService {
             throw new FileNotFoundException("File not found: " + fileName);
         }
 
-        return new FileSystemResource(file);
+        try (BufferedInputStream inputStream = new BufferedInputStream(new FileInputStream(file));
+             OutputStream outputStream = response.getOutputStream()) {
+
+            byte[] buffer = new byte[1024];
+            int bytesRead;
+            long fileSize = file.length();
+
+            response.setContentType("application/octet-stream");
+            response.setHeader("Content-Length", String.valueOf(fileSize));
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + file.getName() + "\"");
+
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+                outputStream.flush();
+            }
+        }
     }
 
 }
