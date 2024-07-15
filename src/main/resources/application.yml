@@ -13,3 +13,8 @@ spring:
         show_sql: true
         format_sql: true
         use_sql_comments: true
+encryption:
+  key: "0123456789abcdef"
+file:
+  uploaded-path: "C:/fescaro-interview/uploaded/"
+  encrypted-path: "C:/fescaro-interview/encrypted/"
